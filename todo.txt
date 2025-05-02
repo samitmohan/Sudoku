@@ -1,0 +1,11 @@
+app.py
+ ↓ image input
+model.py
+ ↳ preprocess image
+ ↳ extract grid
+ ↳ recognize digits
+ ↳ form board matrix
+ ↳ solve using solver.py
+ ↳ generate solved image
+ ↓
+app.py receives solved image

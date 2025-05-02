@@ -54,3 +54,8 @@ sudoku-solver-streamlit/
 # TODO
 
 - Manual correction option before solving
+    Overlay the solution on their original image 
+    Add a "Download clean solved grid" button
+
+So the flow becomes:
+    Scan → See solution on photo → Optional: Download clean version
