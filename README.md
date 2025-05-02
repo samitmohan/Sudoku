@@ -40,7 +40,7 @@ Built using **Python**, **OpenCV**, **Tesseract OCR** / **CNN MNIST**, and **Str
 - Click "Scan Sudoku from Camera" and capture a clear photo.
 - Let the AI extract, analyze, and solve the puzzle.
 - View the solved grid overlay on your original image.
-
+```
 ## 📂 Project Structure
 
 sudoku-solver-streamlit/
@@ -50,7 +50,7 @@ sudoku-solver-streamlit/
 ├── utils.py # Helper functions (grid detection, warping)
 ├── requirements.txt
 └── README.md
-
+```
 # TODO
 
 - Manual correction option before solving
