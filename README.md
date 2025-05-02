@@ -41,13 +41,15 @@ Built using **Python**, **OpenCV**, **Tesseract OCR** / **CNN MNIST**, and **Str
 - Let the AI extract, analyze, and solve the puzzle.
 - View the solved grid overlay on your original image.
 
+## Project Structure
+
 📁 sudoku-solver-streamlit/
-├── app.py # Streamlit UI and app logic
-├── solver.py # Sudoku solving algorithm
-├── ocr.py # Digit recognition (Tesseract/CNN)
-├── utils.py # Helper functions (grid detection, warping)
-├── requirements.txt # Python dependencies
-└── README.md # Project documentation
+    ├── app.py # Streamlit UI and app logic
+    ├── solver.py # Sudoku solving algorithm
+    ├── ocr.py # Digit recognition (Tesseract/CNN)
+    ├── utils.py # Helper functions (grid detection, warping)
+    ├── requirements.txt # Python dependencies
+    └── README.md # Project documentation
 
 # TODO
 
