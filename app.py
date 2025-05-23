@@ -1,7 +1,6 @@
 import streamlit as st
 from PIL import Image
 import io
-from model import process_sudoku_image
 # Page config
 st.set_page_config(page_title="Sudoku Solver", layout="centered")
 
