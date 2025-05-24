@@ -1,9 +1,15 @@
-"""
-Load the MNIST dataset using torchvision.datasets.MNIST.
-Preprocess the data (normalize, transform to tensors).
-Instantiate your DigitRecognizerCNN model.
-Define your loss function (e.g., nn.CrossEntropyLoss) and optimizer (e.g., optim.Adam).
-Implement the training loop (epochs, forward pass, backward pass, optimizer step).
-Evaluate the model's accuracy on the test set.
-Save the trained model's state_dict() to models/digit_recognizer.pth. Make sure the models/ directory exists.
-"""
+# Neural Network
+import torch as nn
+import torchvision.datasets as datasets
+import torchvision.transforms as transforms
+from torch.optim import Adam
+from ml_model import DigitRecognizerCNN
+
+transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))])
+
+train_dataset = datasets.MNIST('./data', train=True, download=True, transform=transforms)
+test_dataset = datasets.MNIST('./data', train=False, download=True, transform=transforms)
+
+Digit = DigitRecognizerCNN()
+
+
