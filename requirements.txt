@@ -1,5 +1,7 @@
 torch
+pytest
 torchvision
 numpy
 streamlit
+streamlit-webrtc
 opencv-python

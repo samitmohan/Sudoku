@@ -1,58 +1,84 @@
-from collections import defaultdict
+from typing import List, Optional, Tuple, Set
+
+DIGITS: List[str] = [str(i) for i in range(1, 10)]
 
 
-class Sudoku:
-    def solveSudoku(self, board):
-        rows = [set() for _ in range(9)]
-        cols = [set() for _ in range(9)]
-        boxes = [set() for _ in range(9)]
-        empty_cells = []
-      
-        for i in range(9):
-            for j in range(9):
-                val = board[i][j]
-                if val == '.': empty_cells.append((i, j))
-                else:
-                    rows[i].add(val)
-                    cols[j].add(val)
-                    boxes[(i//3)*3+(j//3)].add(val)
+def initialize_board( board: List[List[str]]) -> Optional[Tuple[ List[Set[str]],  List[Set[str]], List[Set[str]], List[Tuple[int,int]]  ]]:
+    rows: List[Set[str]] = [set() for _ in range(9)]
+    cols: List[Set[str]] = [set() for _ in range(9)]
+    boxes: List[Set[str]] = [set() for _ in range(9)]
+    empties: List[Tuple[int,int]] = []
 
-        def backtrack(index):
-            if index == len(empty_cells): return True
+    for r in range(9):
+        for c in range(9):
+            val = board[r][c]
+            if val == ".":
+                empties.append((r, c))
+            else:
+                b_index = (r // 3) * 3 + (c // 3)
+                if val in rows[r] or val in cols[c] or val in boxes[b_index]:
+                    # duplicate in row/col/box → invalid board
+                    return None
+                rows[r].add(val)
+                cols[c].add(val)
+                boxes[b_index].add(val)
 
-            r,c = empty_cells[index]
-            b = (r//3)*3+(c//3)
-            for num in map(str, range(1, 10)):
-                if num not in rows[r] and num not in cols[c] and num not in boxes[b]:
-                    board[r][c] = num
-                    rows[r].add(num)
-                    cols[c].add(num)
-                    boxes[b].add(num)
+    return rows, cols, boxes, empties
 
-                    if backtrack(index + 1): return True
 
-                    board[r][c] = '.'
-                    rows[r].remove(num)
-                    cols[c].remove(num)
-                    boxes[b].remove(num)
-            return False
+def candidates(
+    r: int,
+    c: int,
+    rows: List[Set[str]],
+    cols: List[Set[str]],
+    boxes: List[Set[str]],
+) -> List[str]:
+    """
+    Return all digits that can legally go in board[r][c],
+    given the current rows/cols/boxes constraints.
+    """
+    b_index = (r // 3) * 3 + (c // 3)
+    used = rows[r] | cols[c] | boxes[b_index]
+    return [d for d in DIGITS if d not in used]
 
-        backtrack(0)
-        return board
 
-# need to input this board from camera 
-board=[
-    ["5", "3", ".", ".", "7", ".", ".", ".", "."],
-    ["6", ".", ".", "1", "9", "5", ".", ".", "."],
-    [".", "9", "8", ".", ".", ".", ".", "6", "."],
-    ["8", ".", ".", ".", "6", ".", ".", ".", "3"],
-    ["4", ".", ".", "8", ".", "3", ".", ".", "1"],
-    ["7", ".", ".", ".", "2", ".", ".", ".", "6"],
-    [".", "6", ".", ".", ".", ".", "2", "8", "."],
-    [".", ".", ".", "4", "1", "9", ".", ".", "5"],
-    [".", ".", ".", ".", "8", ".", ".", "7", "9"],
-]
-s = Sudoku()
-s.solveSudoku(board)
-for row in board:
-    print(row)
+def solve(
+    board: List[List[str]], *, verbose: bool = False
+) -> Optional[List[List[str]]]:
+    init = initialize_board(board)
+    if init is None:
+        return None
+    rows, cols, boxes, empties = init
+
+    # 2) MRV: sort empties by fewest candidates first
+    empties.sort(key=lambda rc: len(candidates(rc[0], rc[1], rows, cols, boxes)))
+
+    def backtrack(idx: int) -> bool:
+        if idx == len(empties):
+            return True  # all filled
+
+        r, c = empties[idx]
+        b_index = (r // 3) * 3 + (c // 3)
+        for d in candidates(r, c, rows, cols, boxes):
+            if verbose:
+                print(f"Try {d} at ({r},{c})")
+            # place
+            board[r][c] = d
+            rows[r].add(d)
+            cols[c].add(d)
+            boxes[b_index].add(d)
+
+            if backtrack(idx + 1):
+                return True
+
+            # undo
+            if verbose:
+                print(f"Backtrack {d} at ({r},{c})")
+            board[r][c] = "."
+            rows[r].remove(d)
+            cols[c].remove(d)
+            boxes[b_index].remove(d)
+
+        return False
+
+    return board if backtrack(0) else None
