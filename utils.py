@@ -22,9 +22,10 @@ def show_board(board: List[List[str]]) -> None:
         print(" ".join(row))
     print()
 
+
 def load_sudoku_samples(path: str):
     with open(path, "r") as f:
-            data = json.load(f)
+        data = json.load(f)
 
     samples = []
     for entry in data:
@@ -32,10 +33,7 @@ def load_sudoku_samples(path: str):
         sol = entry["solution"]
 
         # Convert '0' → '.' in the puzzle rows
-        puzzle_board = [
-            [ch if ch != "0" else "." for ch in row]
-            for row in puz
-        ]
+        puzzle_board = [[ch if ch != "0" else "." for ch in row] for row in puz]
         solution_board = [list(row) for row in sol]
 
         if len(puzzle_board) != 9 or len(solution_board) != 9:

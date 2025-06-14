@@ -5,3 +5,5 @@ numpy
 streamlit
 streamlit-webrtc
 opencv-python
+easyocr
+Pillow

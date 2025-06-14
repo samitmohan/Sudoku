@@ -3,26 +3,46 @@ import torch.nn as nn
 import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
+from torchvision.datasets import ImageFolder
+from torch.utils.data import ConcatDataset
 
 from recognition import DigitClassifier
-MODEL_PATH    = "models/digit_recognizer.pth"
-BATCH_SIZE    = 64
-LEARNING_RATE = 1e-3
-EPOCHS        = 5
+
+MODEL_PATH = "models/digit_recognizer.pth"
+BATCH_SIZE = 64
+LEARNING_RATE = 5e-4
+EPOCHS = 2
+
 
 def train():
-    transform = transforms.Compose([transforms.ToTensor(), 
-                                    transforms.Normalize((0.1307,), (0.3081,))])
+    transform = transforms.Compose(
+        [
+            transforms.Grayscale(num_output_channels=1),  # <-- FORCE GRAYSCALE
+            transforms.ToTensor(),
+            transforms.Normalize((0.1307,), (0.3081,)),
+        ]
+    )
 
-    train_dataset = datasets.MNIST('./data', train=True, download=True, transform=transform)
-    test_dataset = datasets.MNIST('./data', train=False, download=True, transform=transform)
+    printed_train = ImageFolder(root="./printed_digits/train", transform=transform)
+    printed_test = ImageFolder(root="./printed_digits/test", transform=transform)
+
+    mnist_train = datasets.MNIST(
+        "./data", train=True, download=True, transform=transform
+    )
+    mnist_test = datasets.MNIST(
+        "./data", train=False, download=True, transform=transform
+    )
+
+    train_dataset = ConcatDataset([mnist_train, printed_train])
+    test_dataset = ConcatDataset([mnist_test, printed_test])
+
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = DigitClassifier().to(device)
     loss_fn = nn.CrossEntropyLoss()
     optimiser = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    
+
     # training
     for epoch in range(EPOCHS):
         model.train()
@@ -56,10 +76,6 @@ def train():
     torch.save(model.state_dict(), MODEL_PATH)
     print("Model saved.")
 
+
 if __name__ == "__main__":
     train()
-
-
-
-
-

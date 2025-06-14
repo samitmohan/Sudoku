@@ -1,142 +1,159 @@
+import streamlit as st
 import cv2
 import numpy as np
-from typing import List, Tuple
+from typing import Tuple, List
+
 
 def order_pts(pts: np.ndarray) -> np.ndarray:
-    """ order 4 unordered corner points as: [top-left, top-right, bottom-right, bottom-left] """
+    """Order 4 corner points as [top-left, top-right, bottom-right, bottom-left]."""
     rect = np.zeros((4, 2), dtype="float32")
     s = pts.sum(axis=1)
-    diff = np.diff(pts, axis=1)
-
-    rect[0] = pts[np.argmin(s)]   # top-left has smallest sum
-    rect[2] = pts[np.argmax(s)]   # bottom-right has largest sum
-    rect[1] = pts[np.argmin(diff)]# top-right has smallest diff
-    rect[3] = pts[np.argmax(diff)]# bottom-left has largest diff
+    d = np.diff(pts, axis=1)
+    rect[0] = pts[np.argmin(s)]  # top-left
+    rect[2] = pts[np.argmax(s)]  # bottom-right
+    rect[1] = pts[np.argmin(d)]  # top-right
+    rect[3] = pts[np.argmax(d)]  # bottom-left
     return rect
 
-def detect_grid(image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Detect the largest 4-corner contour in the input RGB image,
-    top-down square warp, return (warped, M), where
-    M is the 3×3 perspective transform from input to warped.
-    """
-    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-    blur = cv2.GaussianBlur(gray, (7, 7), 3)
 
-    # adaptive threshold + invert
-    thresh = cv2.adaptiveThreshold(
-        blur, 255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY, 11, 2
-    )
-    thresh = cv2.bitwise_not(thresh)
+def detect_grid(image):
+    """Locate largest grid in BGR image -> top down view -> return warped and top down view"""
+    h, w = image.shape[:2]
+    area = h * w
 
-    # largest contour
-    contours, _ = cv2.findContours(
-        thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-    )
-    if not contours:
-        raise ValueError("No contours found for Sudoku grid.")
-    largest = max(contours, key=cv2.contourArea)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    gray = clahe.apply(gray)
+    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+    inv = cv2.bitwise_not(thresh)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    clean = cv2.morphologyEx(inv, cv2.MORPH_CLOSE, kernel)
+    clean = cv2.bitwise_not(clean)
 
-    # approximate polygon & ensure 4 corners
-    peri = cv2.arcLength(largest, True)
-    approx = cv2.approxPolyDP(largest, 0.02 * peri, True)
+    # find contours and filter for large square
+    contours, _ = cv2.findContours(clean, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    candidates = []
+    MIN_BOARD_AREA_RATIO = 0.05
+    for c in contours:
+        a = cv2.contourArea(c)
+        if a < MIN_BOARD_AREA_RATIO * area:
+            continue
+        x, y, cw, ch = cv2.boundingRect(c)
+        ar = cw / float(ch)
+        if 0.8 <= ar <= 1.2:
+            candidates.append(c)
+
+    if not candidates:
+        raise ValueError("No valid Sudoku grid found")
+
+    # Approximate to 4 corners (largest quad)
+    grid = max(candidates, key=cv2.contourArea)
+    peri = cv2.arcLength(grid, True)
+    approx = cv2.approxPolyDP(grid, 0.04 * peri, True)
     if len(approx) != 4:
-        raise ValueError("Could not find a 4-corner Sudoku grid.")
+        raise ValueError("Grid outline is not quadrilateral")
+
     pts = approx.reshape(4, 2)
     ordered = order_pts(pts)
-
-    # warp size
+    # perspective transform  : top down
     (tl, tr, br, bl) = ordered
-    widthA  = np.linalg.norm(br - bl)
-    widthB  = np.linalg.norm(tr - tl)
+    widthA = np.linalg.norm(br - bl)
+    widthB = np.linalg.norm(tr - tl)
     heightA = np.linalg.norm(tr - br)
     heightB = np.linalg.norm(tl - bl)
     side = int(max(widthA, widthB, heightA, heightB))
 
-    # destination contours
-    dst = np.array([
-        [0,      0],
-        [side-1, 0],
-        [side-1, side-1],
-        [0,      side-1]
-    ], dtype="float32")
+    dst = np.array(
+        [[0, 0], [side - 1, 0], [side - 1, side - 1], [0, side - 1]], dtype="float32"
+    )
 
     M = cv2.getPerspectiveTransform(ordered, dst)
+    # warp to a flat square view
     warped = cv2.warpPerspective(image, M, (side, side))
-    return warped, M
 
-def extract_cells(warped: np.ndarray) -> List[np.ndarray]:
-    """ split warped board into 81 cells -> return list of 81 arrays """
-    side = warped.shape[0]
+    scale = 2  # Upsample factor
+    warped_up = cv2.resize(
+        warped, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC
+    )
+
+    # Correct homography (original → warped_up)
+    S_up = np.array(
+        [[scale, 0, 0], [0, scale, 0], [0, 0, 1]],
+        dtype=np.float32,
+    )
+    M_scaled = S_up @ M
+
+    bw = cv2.cvtColor(warped_up, cv2.COLOR_BGR2GRAY)
+    _, bw = cv2.threshold(bw, 128, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+    cell = side // 9 * scale
+    mask = np.ones_like(bw) * 255
+    lines = cv2.HoughLinesP(
+        bw,
+        rho=1,
+        theta=np.pi / 180,
+        threshold=int(cell * 1.0),
+        minLineLength=int(cell * 0.5),
+        maxLineGap=10
+    )
+    if lines is not None:
+        for line in lines:
+            x1, y1, x2, y2 = line[0]
+            cv2.line(mask, (x1, y1), (x2, y2), 0, thickness=7)
+    return warped_up, M_scaled
+
+
+def _font_params(cell_px: int) -> tuple[float, int]:
+    """
+    Return (font_scale, thickness) for cv2.putText, scaled
+    to the side-length of a Sudoku cell.
+    You can tweak the constants below until the look matches your template.
+    """
+    # these were tuned for ~40–70 px cells; they scale linearly:
+    scale     = 1.0 * cell_px / 50     
+    thickness = max(1, int(cell_px / 40))
+    return scale, thickness
+
+def draw_solution_overlay( original_img, warped_img, M, board, solved):
+    side = warped_img.shape[0]
     cell = side // 9
-    margin = int(cell * 0.2)  
+    # start with a blank canvas so only the solved digits are pasted back
+    scale, thick = _font_params(cell)
+    overlay = np.zeros_like(warped_img)
 
-    cells = []
-    for r in range(9):
-        for c in range(9):
-            x0 = c * cell + margin
-            y0 = r * cell + margin
-            x1 = (c + 1) * cell - margin
-            y1 = (r + 1) * cell - margin
+    for row in range(9):
+        for col in range(9):
+            if board[row][col] == ".":
+                digit = str(solved[row][col])
+                x = col * cell + cell // 6
+                y = row * cell + int(cell * 0.8)
 
-            crop = warped[y0:y1, x0:x1]
-            gray = cv2.cvtColor(crop, cv2.COLOR_RGB2GRAY)
-
-            # digit becomes white on black
-            _, thresh = cv2.threshold(
-                gray, 0, 255,
-                cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU
-            )
-
-            # pad to square then resize to 28×28
-            h, w = thresh.shape
-            max_dim = max(h, w)
-            pad_vert = (max_dim - h) // 2
-            pad_horz = (max_dim - w) // 2
-            squared = cv2.copyMakeBorder(
-                thresh,
-                pad_vert, max_dim - h - pad_vert,
-                pad_horz, max_dim - w - pad_horz,
-                cv2.BORDER_CONSTANT,
-                value=0
-            )
-            digit = cv2.resize(squared, (28, 28), interpolation=cv2.INTER_AREA)
-            cells.append(digit)
-
-    return cells
-
-def draw_solution_overlay( frame: np.ndarray, warped: np.ndarray, M: np.ndarray, original_board: List[List[str]], solved_board: List[List[str]]) -> np.ndarray:
-    """ overlay only the newly filled digits (where original_board[r][c]=='.') """
-    overlay = np.zeros_like(warped)
-    side = warped.shape[0]
-    cell = side // 9
-
-    # Draw text in green (R,G,B)
-    for r in range(9):
-        for c in range(9):
-            if original_board[r][c] == ".":
-                num = solved_board[r][c]
-                # center-ish in each cell
-                x = c * cell + cell // 2
-                y = r * cell + int(cell * 0.75)
+                # y = row * cell + 3 * cell // 4
                 cv2.putText(
                     overlay,
-                    num,
-                    (x - 10, y + 10),
+                    digit,
+                    (x, y),
                     cv2.FONT_HERSHEY_SIMPLEX,
-                    1.0,
-                    (0, 255, 0),
-                    2,
-                    cv2.LINE_AA
+                    scale,
+                    (80, 80, 80),
+                    thick,
+                    cv2.LINE_AA,
                 )
 
-    # warp the overlay back to original frame perspective
-    invM = np.linalg.inv(M)
-    h, w = frame.shape[:2]
-    back = cv2.warpPerspective(overlay, invM, (w, h))
+    # Warp overlay back to original perspective
+    Minv = np.linalg.inv(M)
+    h, w = original_img.shape[:2]
+    result = cv2.warpPerspective(overlay, Minv, (w, h))
 
-    # combine with original (70% original + 30% overlay)
-    result = cv2.addWeighted(frame, 1.0, back, 0.7, 0)
-    return result
+    gray_mask = cv2.cvtColor(result, cv2.COLOR_BGR2GRAY)
+
+    # Combine with original image
+
+    thick = cv2.dilate(gray_mask, np.ones((3, 3), np.uint8), iterations=1)
+    mask = cv2.threshold(thick, 5, 255, cv2.THRESH_BINARY)[1]
+
+    inv_mask   = cv2.bitwise_not(mask)
+    background = cv2.bitwise_and(original_img, original_img, mask=inv_mask)
+    foreground = cv2.bitwise_and(result, result, mask=mask)
+
+    combined = cv2.add(background, foreground)
+    return combined

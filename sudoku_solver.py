@@ -1,13 +1,13 @@
-from typing import List, Optional, Tuple, Set
+from typing import List, Tuple, Set
 
 DIGITS: List[str] = [str(i) for i in range(1, 10)]
 
 
-def initialize_board( board: List[List[str]]) -> Optional[Tuple[ List[Set[str]],  List[Set[str]], List[Set[str]], List[Tuple[int,int]]  ]]:
+def initialize_board(board):
     rows: List[Set[str]] = [set() for _ in range(9)]
     cols: List[Set[str]] = [set() for _ in range(9)]
     boxes: List[Set[str]] = [set() for _ in range(9)]
-    empties: List[Tuple[int,int]] = []
+    empties: List[Tuple[int, int]] = []
 
     for r in range(9):
         for c in range(9):
@@ -42,9 +42,7 @@ def candidates(
     return [d for d in DIGITS if d not in used]
 
 
-def solve(
-    board: List[List[str]], *, verbose: bool = False
-) -> Optional[List[List[str]]]:
+def solve(board: List[List[str]], *, verbose: bool = False):
     init = initialize_board(board)
     if init is None:
         return None
